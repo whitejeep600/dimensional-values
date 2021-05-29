@@ -129,12 +129,24 @@
 	    :denominator (get_deno args)))
 
 
+(defun get_same_type_after_bar (list_arg unit)
+  (if (null (first list_arg))
+      '(nil nil)
+      (if (same_union (first list_arg) unit)
+	      (list (first list_arg) nil)
+	      (get_same_type_after_bar (rest list_arg) unit))))
+
+; returns a list whose first element is a unit contained in list_arg which has the same type as the given unit,
+; (nil if there is no such unit), and the second element is T iff it was found before the division bar.
 (defun get_same_type (list_arg unit)
   (if (null list_arg)
-      '()
-      (if (same_union (first list_arg) unit)
-	  (first list_arg)
-	  (get_same_type (rest list_arg) unit))))
+      '(nil nil)
+      (if (eq (first list_arg) '/)
+	  (get_same_type_after_bar (rest list_arg) unit)
+	  (if (same_union (first list_arg) unit)
+	      (list (first list_arg) T)
+	      (get_same_type (rest list_arg) unit)))))
+
 
 
 (defun get_ratio (unit_a unit_b)
@@ -156,9 +168,15 @@
 	  (concatenate 'list '(/) (simplify_single_list (rest arg)))
 	  (let
 	      ((same_type (get_same_type (rest arg) (first arg))))
-	    (if (null same_type)
+	    (if (null (first same_type))
 		(concatenate 'list (list (first arg)) (simplify_single_list (rest arg)))
-		(concatenate 'list (list (get_ratio same_type (first arg))) (list (first arg)) (simplify_single_list (get_list_without arg same_type))))))))
+		(if (null (second same_type))
+		    (concatenate 'list (simplify_single_list (get_list_without arg (first same_type)))
+				       (list (get_ratio (first same_type) (first arg)))
+				       (list (first arg)))
+		    (concatenate 'list (list (get_ratio (first same_type) (first arg)))
+				       (list (first arg))
+				       (simplify_single_list (get_list_without arg (first same_type))))))))))
 
 
 (defun simplify (dimval)
@@ -177,3 +195,8 @@
 (define-measure 'mile 'distance)
 (define-rule 'kilometer 'meter (/ 1 1000))
 (define-rule 'mile 'meter (/ 1 1609))
+
+(defparameter a '(meter kilometer / mile))
+(trace simplify_single_list)
+(trace get_same_type)
+(trace get_same_type_after_bar)
