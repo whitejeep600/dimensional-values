@@ -1,16 +1,10 @@
-; generalnie to wszystkie sensowne jednostki sa albo jednostkami podstawowymi, albo mnozeniem, albo ilorazem dwoch mnozen
-; mnozenia mozemy trzymac po prostu jako liste jednostek
-; alternatywnie jednostki niebedace mnozeniem moga byc lista jednoelementowa, kinda, bo poza wyrazeniami i tak trzeba je trzymac jako
-; atomy
-; albo wszystkie wielkosci to liczba, lista nad kreska, lista pod kreska
-
-; funkcje:
+; todo:
 ; dodawanie dwoch wielkosci
 ; dodawanie liczby do wielkosci, jesli wielkosc jest liczba
-; mnozenie i dzielenie wielkosci ze soba
 ; mnozenie i dzielenie wielkosci z liczbami
-; upraszczanie wielkosci
-; no i ogolnie to trzeba tez te baze stworzyc
+; overloadowanie operatorow dla powyzszych operacji
+; package
+; komentarze
 
 ; two types of entities will be defined in the library.
 ; the first will be a unit, representing a an elementary unit like: meter, second, kilogram.
@@ -22,13 +16,17 @@
 ; list and (s s) as the second list. in some cases one (or both) the lists can be empty,
 ; for example for 1Hz = 1/s, the first list will be empty.
 
-; dobra, tylko tera to o czym pisalem p jurkiewiczowi to wymaga co najmniej jakiegos find and union zeby to hulao
 
-; (defparameter a '(2137 km / h))
-; (eq (second a) 'km)
-; T
 
 ; (defparameter a (dim 20 '(meter / second)))
+
+;(defpackage :measures
+;  (:nicknames :miary)
+;  (:use :common-lisp)
+;  (:export :distance :meter :kilometer :mile :time :second :hour :minute :c))
+
+;(in-package measures)
+
 
 (defmacro set_father (son father)
   `(setf (get ,son 'father) ,father))
@@ -93,7 +91,7 @@
 	  (write "the relationship between the units can already be deduced based on other relationships. failed")
 	  (fau_union ,from_unit ,to_unit (/ 1 ,multiplier)))))
 
-(defstruct dim
+(defstruct dimv
   number
   numerator
   denominator)
@@ -124,7 +122,7 @@
 
 
 (defun dim (number args)
-  (make-dim :number (get_x number)
+  (make-dimv :number (get_x number)
 	    :numerator (get_num args)
 	    :denominator (get_deno args)))
 
@@ -137,10 +135,10 @@
 	      (get_same_type_after_bar (rest list_arg) unit))))
 
 ; returns a list whose first element is a unit contained in list_arg which has the same type as the given unit,
-; (nil if there is no such unit), and the second element is T iff it was found before the division bar.
+; (nil if there is no such unit), and the second element is T iff it was found ; todo w tym samym miejscu
 (defun get_same_type (list_arg unit)
   (if (null list_arg)
-      '(nil nil)
+      '(nil T)
       (if (eq (first list_arg) '/)
 	  (get_same_type_after_bar (rest list_arg) unit)
 	  (if (same_union (first list_arg) unit)
@@ -161,33 +159,119 @@
 	  (concatenate 'list (list (first list_arg)) (get_list_without (rest list_arg) what)))))
 
 
-(defun simplify_single_list (arg)
+(defun simplify_list (arg)
   (if (null arg)
       '()
       (if (eq (first arg) '/)
-	  (concatenate 'list '(/) (simplify_single_list (rest arg)))
+	  (concatenate 'list '(/) (simplify_list (rest arg)))
 	  (let
 	      ((same_type (get_same_type (rest arg) (first arg))))
 	    (if (null (first same_type))
-		(concatenate 'list (list (first arg)) (simplify_single_list (rest arg)))
-		(if (null (second same_type))
-		    (concatenate 'list (simplify_single_list (get_list_without arg (first same_type)))
-				       (list (get_ratio (first same_type) (first arg)))
-				       (list (first arg)))
-		    (concatenate 'list (list (get_ratio (first same_type) (first arg)))
-				       (list (first arg))
-				       (simplify_single_list (get_list_without arg (first same_type))))))))))
+		(concatenate 'list (list (first arg)) (simplify_list (rest arg)))
+		(if (and (eq (first arg) (first same_type)) (not (second same_type)))
+		    (simplify_list (get_list_without (rest arg) (first same_type)))
+		    (if (null (second same_type))
+			(concatenate 'list (simplify_list (get_list_without arg (first same_type)))
+				     (list (get_ratio (first same_type) (first arg)))
+				     (list (first arg)))
+			(concatenate 'list (list (get_ratio (first same_type) (first arg)))
+				     (list (first arg))
+				     (simplify_list (get_list_without arg (first same_type)))))))))))
+
+(defun get_list_representation (dimval)
+  (concatenate 'list (dimv-numerator dimval) '(/) (dimv-denominator dimval)))
+
+
+(defun get_multiplier_after_bar (list_arg num)
+  (if (null list_arg)
+      num
+      (if (numberp (first list_arg))
+	  (get_multiplier_after_bar (rest list_arg) (/ num (first list_arg)))
+	  (get_multiplier_after_bar (rest list_arg) num))))
+
+
+(defun get_multiplier_before_bar (list_arg num)
+  (if (eq '/ (first list_arg))
+      (get_multiplier_after_bar list_arg num)
+      (if (numberp (first list_arg))
+	  (get_multiplier_before_bar (rest list_arg) (* num (first list_arg)))
+	  (get_multiplier_before_bar (rest list_arg) num))))
+
+
+(defun get_multiplier (list_arg)
+  (get_multiplier_before_bar list_arg 1))
+
+
+
+(defun get_units (list_arg)
+  (cond
+    ((null list_arg) '())
+    ((numberp (first list_arg)) (get_units (rest list_arg)))
+    (t (concatenate 'list (list (first list_arg)) (get_units (rest list_arg))))))
+
+
+(defun get_units_after_bar (list_arg)
+  (if (eq (first list_arg) '/)
+      (get_units (rest list_arg))
+      (get_units_after_bar (rest list_arg))))
+
+
+(defun get_units_before_bar (list_arg)
+  (cond ((eq (first list_arg) '/) '())
+	((numberp (first list_arg)) (get_units_before_bar (rest list_arg)))
+	(t (concatenate 'list (list (first list_arg)) (get_units_before_bar (rest list_arg))))))
+
+
+(defun simplify_aux (dimval)
+  (let ((simplified_list (simplify_list (get_list_representation dimval))))
+    (make-dimv :number (* (dimv-number dimval) (get_multiplier simplified_list))
+	       :numerator (get_units_before_bar simplified_list)
+	       :denominator (get_units_after_bar simplified_list))))
+
+
+(defun lists_the_same (l1 l2)
+  (if (and (null l1) (null l2))
+      T
+      (if (or (null l1) (null l2))
+	  nil
+	  (if (not (eq (first l1) (first l2)))
+	      nil
+	      (lists_the_same (rest l1) (rest l2))))))
+
+
+(defun dimvals_the_same (dimval1 dimval2)
+  (and (eq (dimv-number dimval1) (dimv-number dimval2))
+       (lists_the_same (dimv-numerator dimval1) (dimv-numerator dimval2))
+       (lists_the_same (dimv-denominator dimval1) (dimv-denominator dimval2))))
 
 
 (defun simplify (dimval)
-  ; najpierw uprosc licznik ze samym soba, tj usun zduplikowane jednostki
-  ; moze tak, zeby uproscic dana liste sama ze soba: dla kazdego kolejnego
-  ; symbolu patrzymy czy w reszcie listy jest jakis symbol ktory da sie uproscic.
-  ; jezeli tak, to go zastepujemy ilorazem. w ten sposob potencjalnie dostajemy
-  ; liste jednostek i liczb, wiec zbieramy hurtem liczby i jednostki.
-  ; heh, nawet nie XD mozna te funkcje wywolac dla licznika skonkatenowanego z kreska i mianownikiem,
-  ; a potem zebrac do kupy osobno liczby i osobno jednostki
-  )
+  (let ((simplified (simplify_aux dimval)))
+    (if (dimvals_the_same simplified dimval)
+	dimval
+	(simplify simplified))))
+
+
+(defun multiply_dimvals (dimval1 dimval2)
+  (simplify (make-dimv :number (* (dimv-number dimval1) (dimv-number dimval2))
+		       :numerator (concatenate 'list (dimv-numerator dimval1) (dimv-numerator dimval2))
+		       :denominator (concatenate 'list (dimv-denominator dimval1) (dimv-denominator dimval2)))))
+
+
+(defun dimval_is_number (dimval)
+  (let ((simplified (simplify dimval)))
+    (and (null (dimv-numerator simplified)) (null (dimv-denominator simplified)))))
+
+
+(defun inverse (dimval)
+  (make-dimv :number (/ 1 (dimv-number dimval))
+	     :numerator (dimv-denominator dimval)
+	     :denominator (dimv-numerator dimval)))
+
+
+(defun divide_dimvals (dimval1 dimval2)
+  (multiply_dimvals dimval1 (inverse dimval2)))
+
 
 (define-group 'distance)
 (define-measure 'meter 'distance)
@@ -196,7 +280,23 @@
 (define-rule 'kilometer 'meter (/ 1 1000))
 (define-rule 'mile 'meter (/ 1 1609))
 
-(defparameter a '(meter kilometer / mile))
-(trace simplify_single_list)
-(trace get_same_type)
-(trace get_same_type_after_bar)
+(define-group 'time)
+(define-measure 'second 'time)
+(define-measure 'minute 'time)
+(define-measure 'hour 'time)
+(define-rule 'hour 'minute (/ 1 60))
+(define-rule 'minute 'second (/ 1 60))
+
+(define-group 'weight)
+(define-measure 'kilogram 'weight)
+(define-measure 'ounce 'weight)
+(define-measure 'gram 'weight)
+(define-rule 'kilogram 'gram (/ 1 1000))
+(define-rule 'gram 'ounce 28)
+
+(defparameter a (dim 420 '(meter / second)))
+(defparameter b (dim 1 '(second)))
+(defparameter c (multiply_dimvals a b))
+(defparameter d (dim 0.1 '(/ second second)))
+(defparameter e (dim 6 '(gram)))
+(defparameter f (multiply_dimvals c (multiply_dimvals d e))) ; now f evaluates to 252.00002 meters * grams / second^2 (a quarter of a newton)
