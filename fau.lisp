@@ -2,19 +2,23 @@
   `(setf (get ,son 'father) ,father))
 
 (defmacro fau_init (new_symbol)
-  `(set_father ,new_symbol ,new_symbol)
-  `(setf (get ,new_symbol 'ratio) 1.0))
+  `(progn
+     (set_father ,new_symbol ,new_symbol)
+     (setf (get ,new_symbol 'ratio) 1.0)))
 
-; ustawiamy jako wlasnego ojca to co nam zwroci fau_find i sami to zwracamy
 (defun fau_find (s)
   (if (eq s (get s 'father))
       s
       (progn
-	; ustaw odpowiednio przelicznik. moze zapamietaj starego ojca i tutaj pomnoz swoj przelicznik przez jego?
-	; tak czy inaczej no to chyba zadziala jezeli bedziemy dla kazdego syna pamietac ilu ojcow jest wart xd
-	; i zawsze przy zmianie ojca zmieniamy tez te wartosci
-	(set_father s (fau_find (get s 'father)))
+	(let ((prev_ratio (get (get s 'father) 'ratio))
+	      (to_father_ratio (get s 'ratio)))
+	      (set_father s (fau_find (get s 'father)))
+	      (setf (get s 'ratio) (* to_father_ratio prev_ratio)))
 	(get s 'father))))
 
-(defun fau_union (a b)
-  (set_father (fau_find a) (fau_find b)))
+(defun fau_union (a b a_to_b_ratio)
+  (let
+      ((a_father (fau_find a))
+       (b_father (fau_find b)))
+    (set_father (fau_find a) (fau_find b))
+    (setf (get a_father 'ratio) (* a_to_b_ratio (/ (get b 'ratio) (get a 'ratio))))))
