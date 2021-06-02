@@ -13,7 +13,7 @@
 (defpackage :measures
 (:nicknames :miary)
 (:use :common-lisp)
-(:export :distance :meter :kilometer :mile :time :second :hour :minute :gram :kilogram :ounce :dim :mul :div :is_number :dimv :define-measure :define-rule :define-group))
+(:export :distance :meter :kilometer :mile :time :second :hour :minute :gram :kilogram :ounce :dim :mul :div :is_number :dimv :define-measure :define-rule :define-group :plus :minus :dim))
 
 
 (in-package measures)
@@ -88,6 +88,7 @@
   number
   numerator
   denominator)
+
 
 ; these three are auxiliary functions for the dim function.
 (defun get_x (arg)
@@ -206,7 +207,6 @@
   (get_multiplier_before_bar list_arg 1))
 
 
-
 (defun get_units (list_arg)
   (cond
     ((null list_arg) '())
@@ -226,6 +226,7 @@
   (cond ((eq (first list_arg) '/) '())
 	((numberp (first list_arg)) (get_units_before_bar (rest list_arg)))
 	(t (concatenate 'list (list (first list_arg)) (get_units_before_bar (rest list_arg))))))
+
 
 ;;; auxiliary for the simplify function.
 (defun simplify_aux (dimval)
@@ -282,7 +283,6 @@
 		       :denominator (dimv-denominator arg2))))
 
 
-;;; I ended up not using this but some end user might want it so I left it
 (defun is_number (dimval)
   (let ((simplified (simplify dimval)))
     (and (null (dimv-numerator simplified)) (null (dimv-denominator simplified)))))
@@ -304,6 +304,36 @@
 
 (defun div (dimval1 dimval2)
   (mul dimval1 (inverse dimval2)))
+
+
+(defun get_negative (dimval)
+  (make-dimv :number (- (dimv-number dimval))
+	     :numerator (dimv-numerator dimval)
+	     :denominator (dimv-denominator dimval)))
+
+
+(defun get_val_with_added_number (dimval to_add)
+  (make-dimv :number (+ to_add (dimv-number dimval))
+	     :numerator (dimv-numerator dimval)
+	     :denominator (dimv-denominator dimval)))
+
+
+;;; returns a value which has a unit reverse to that of dimval and the number equal to 1.
+;;; this is used to reconcile values of different (but compatible) units while adding.
+(defun get_rev_unit (dimval)
+  (make-dimv :number 1
+	     :numerator (dimv-denominator dimval)
+	     :denominator (dimv-numerator dimval)))
+
+
+(defun plus (dimval1 dimval2)
+  (if (not (is_number (div dimval1 dimval2)))
+      (write "cannot add the values due to a disparity of units")
+      (get_val_with_added_number dimval1 (dimv-number (mul dimval2 (get_rev_unit dimval1))))))
+
+
+(defun minus (dimval1 dimval2)
+  (plus dimval1 (get_negative dimval2)))
 
 
 (define-group 'distance)
@@ -334,3 +364,5 @@
 ;(defparameter e (dim 6 '(gram)))
 ;(defparameter f (mul c (mul d e))) ; now f evaluates to 252.00002 (meters * grams) / second^2 (a quarter of a newton)
 ;(defparameter g (div 3 f)) ; now g is 0.012 seconds^2 / (grams * meters)
+;(defparameter h (dim 10 '(kilometer / hour)))
+;(defparameter i (minus a h)) ; now i is about 417 meter / second
